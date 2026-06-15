@@ -295,7 +295,7 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── State ────────────────────────────────────────────────────────────────────
-let pdfBytes=null, pdfRawBuf=null, pdfJsDoc=null, totalPages=1, currentPage=1;
+let pdfBytes=null, pdfJsDoc=null, totalPages=1, currentPage=1;
 let sigDataUrl=null, pdfFileName='';
 let canvasW=0, canvasH=0;
 let currentTool='sig';
@@ -343,17 +343,18 @@ document.getElementById('pdf-input').addEventListener('change', async e=>{
   if(!file.name.toLowerCase().endsWith('.pdf')){ showStatus('error','Please select a PDF file.'); return; }
   showLoader('Loading PDF…');
   try{
-    // Use FileReader for maximum Android compatibility
+    // Use FileReader for maximum compatibility
     const rawBuf = await new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);  // keep as ArrayBuffer
+      reader.onload = e => resolve(e.target.result);
       reader.onerror = () => reject(new Error('FileReader failed'));
       reader.readAsArrayBuffer(file);
     });
-    pdfBytes = new Uint8Array(rawBuf);   // for pdf.js preview
-    pdfRawBuf = rawBuf;                  // for pdf-lib save (needs fresh copy each time)
+    // Copy bytes BEFORE pdf.js consumes the ArrayBuffer — it detaches it on some browsers
+    pdfBytes = new Uint8Array(rawBuf.slice(0));   // copy 1 — for pdf-lib save
     pdfFileName=file.name;
-    pdfJsDoc=await pdfjsLib.getDocument({data:new Uint8Array(rawBuf)}).promise;
+    // Give pdf.js its own separate copy so the two never share the same buffer
+    pdfJsDoc=await pdfjsLib.getDocument({data:new Uint8Array(rawBuf.slice(0))}).promise;
     totalPages=pdfJsDoc.numPages; currentPage=1;
     const meta=totalPages+' page'+(totalPages>1?'s':'')+' · '+(file.size/1024).toFixed(0)+' KB';
     document.getElementById('file-name-display').textContent=pdfFileName;
@@ -677,9 +678,8 @@ async function applyAndDownload(){
   showLoader('Building PDF…');
   try{
     const {PDFDocument,rgb}=PDFLib;
-    // Always pass a fresh Uint8Array copy — avoids "detached ArrayBuffer" on Android
-    const freshBytes = new Uint8Array(pdfRawBuf.slice(0));
-    const doc = await PDFDocument.load(freshBytes, {
+    // pdfBytes is already a safe independent copy made at load time
+    const doc = await PDFDocument.load(pdfBytes, {
       ignoreEncryption: true,
       updateMetadata: false,
     });
@@ -733,7 +733,7 @@ async function applyAndDownload(){
 
 // ── Reset ─────────────────────────────────────────────────────────────────────
 function reset(){
-  pdfBytes=null; pdfRawBuf=null; pdfJsDoc=null; sigDataUrl=null; pdfFileName='';
+  pdfBytes=null; pdfJsDoc=null; sigDataUrl=null; pdfFileName='';
   currentPage=1; totalPages=1; selectedId=null; annIdCounter=0;
   Object.keys(pageAnnotations).forEach(k=>delete pageAnnotations[k]);
   document.querySelectorAll('.ann-overlay').forEach(el=>el.remove());
