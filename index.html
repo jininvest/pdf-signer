@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#6c63ff"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="PDF Signer"/>
+  <title>PDF Signer</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="icon" href="icons/icon-192.png"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --purple:#6c63ff;--purple-light:#ede9ff;--ink:#1a1a2e;
+      --muted:#6b7280;--surface:#fff;--bg:#f5f4ff;
+      --danger:#ef4444;--success:#22c55e;--orange:#f97316;
+      --radius:14px;--shadow:0 4px 20px rgba(108,99,255,0.12);
+    }
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      background:var(--bg);color:var(--ink);min-height:100dvh;overflow-x:hidden;
+      -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+    #app{display:flex;flex-direction:column;min-height:100dvh}
+    header{background:var(--purple);color:white;padding:14px 20px 12px;display:flex;
+      align-items:center;gap:10px;position:sticky;top:0;z-index:100;
+      box-shadow:0 2px 12px rgba(108,99,255,0.3)}
+    header .logo{font-size:22px}
+    header h1{font-size:18px;font-weight:700}
+    header .subtitle{font-size:11px;opacity:.75;margin-top:1px}
+    #steps{display:flex;background:white;border-bottom:1px solid #ede9ff}
+    .step-pill{flex:1;min-width:72px;padding:10px 4px 8px;text-align:center;font-size:11px;
+      color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+    .step-pill .step-num{width:22px;height:22px;border-radius:50%;background:#e5e7eb;
+      color:#9ca3af;font-size:11px;font-weight:700;display:flex;align-items:center;
+      justify-content:center;margin:0 auto 4px}
+    .step-pill.active{color:var(--purple);border-bottom-color:var(--purple)}
+    .step-pill.active .step-num{background:var(--purple);color:white}
+    .step-pill.done .step-num{background:var(--success);color:white}
+    .step-pill.done{color:#374151}
+    main{flex:1;padding:14px 14px 14px}
+    .card{background:var(--surface);border-radius:var(--radius);padding:16px;
+      box-shadow:var(--shadow);margin-bottom:14px}
+    /* Upload */
+    #upload-zone{border:2.5px dashed #c4b5fd;border-radius:var(--radius);padding:44px 24px;
+      text-align:center;background:var(--purple-light);cursor:pointer}
+    #upload-zone:active{border-color:var(--purple);background:#ddd6ff}
+    #upload-zone .upload-icon{font-size:52px;margin-bottom:14px}
+    #upload-zone h2{font-size:18px;font-weight:700;margin-bottom:6px}
+    #upload-zone p{font-size:14px;color:var(--muted);margin-bottom:20px}
+    /* Buttons */
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+      padding:12px 20px;border-radius:10px;border:none;font-size:14px;font-weight:600;
+      cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s,transform .1s}
+    .btn:active{opacity:.85;transform:scale(.97)}
+    .btn:disabled{opacity:.4;pointer-events:none}
+    .btn-primary{background:var(--purple);color:white;width:100%}
+    .btn-secondary{background:#f3f4f6;color:#374151}
+    .btn-row{display:flex;gap:8px}
+    .btn-row .btn{flex:1}
+    /* File chip */
+    .file-chip{display:flex;align-items:center;gap:10px;background:var(--purple-light);
+      border-radius:10px;padding:11px 13px;margin-bottom:14px}
+    .file-chip .file-icon{font-size:26px;flex-shrink:0}
+    .file-chip .file-name{font-weight:600;font-size:13px;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap}
+    .file-chip .file-meta{font-size:11px;color:var(--muted)}
+    .file-chip .change-btn{margin-left:auto;flex-shrink:0;font-size:12px;padding:5px 11px}
+    /* Sig pad */
+    #sig-pad-wrap{border:2.5px dashed var(--purple);border-radius:12px;overflow:hidden;
+      background:#fafafe;position:relative;touch-action:none}
+    #sig-canvas{display:block;width:100%;height:150px;cursor:crosshair;touch-action:none}
+    #sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      font-size:13px;color:#c4b5fd;font-weight:500;pointer-events:none;text-align:center}
+    /* Tool selector */
+    #tool-bar{display:flex;gap:8px;margin-bottom:12px}
+    .tool-btn{flex:1;padding:10px 8px;border-radius:10px;border:2px solid transparent;
+      font-size:13px;font-weight:600;cursor:pointer;text-align:center;
+      background:#f3f4f6;color:#374151;transition:all .2s}
+    .tool-btn.active{background:var(--purple-light);border-color:var(--purple);color:var(--purple)}
+    .tool-btn.active-orange{background:#fff7ed;border-color:var(--orange);color:var(--orange)}
+    /* Date input bar */
+    #date-bar{display:none;background:#fff7ed;border-radius:10px;padding:12px;
+      margin-bottom:12px;gap:10px;align-items:center}
+    #date-bar.visible{display:flex}
+    #date-input{flex:1;border:1.5px solid #fed7aa;border-radius:8px;padding:9px 12px;
+      font-size:15px;background:white;color:var(--ink);font-family:inherit;
+      user-select:text;-webkit-user-select:text}
+    #date-bar label{font-size:12px;color:var(--orange);font-weight:600;white-space:nowrap}
+    /* Hint */
+    .hint-bar{border-radius:10px;padding:10px 13px;font-size:13px;font-weight:600;
+      margin-bottom:10px;text-align:center}
+    .hint-purple{background:var(--purple);color:white}
+    .hint-orange{background:var(--orange);color:white}
+    .hint-green{background:#f0fdf4;color:#15803d}
+    /* Page nav */
+    #page-nav{display:none;align-items:center;justify-content:center;gap:14px;
+      padding:8px 0;font-size:14px;color:var(--muted)}
+    #page-nav .btn{padding:8px 16px;font-size:13px}
+    /* PDF viewport — no overflow hidden so page can scroll under it */
+    #pdf-viewport{position:relative;border-radius:8px;background:#555}
+    #pdf-canvas{display:block;width:100%;height:auto;border-radius:8px}
+    /* ── Annotation overlays ── */
+    .ann-overlay{
+      position:absolute;cursor:pointer;
+      /* transparent by default — no background, no border */
+      background:transparent;
+      border:none;
+      touch-action:none; /* we handle gestures ourselves */
+    }
+    /* selection ring appears only when selected */
+    .ann-overlay.sel-sig{ border:2px solid var(--purple);border-radius:5px; }
+    .ann-overlay.sel-date{ border:2px solid var(--orange);border-radius:5px; }
+    .ann-overlay img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
+    /* Date text — transparent background, dark text */
+    .ann-date-text{
+      width:100%;height:100%;display:flex;align-items:center;
+      font-size:13px;font-weight:600;color:#1a1a2e;
+      pointer-events:none;white-space:nowrap;overflow:hidden;
+      padding:0 4px;background:transparent;
+    }
+    /* Resize corner handles — hidden unless selected */
+    .rh{
+      position:absolute;width:22px;height:22px;border-radius:50%;
+      border:2.5px solid white;touch-action:none;z-index:20;
+      display:none;  /* shown by JS when selected */
+    }
+    .rh-sig{background:var(--purple)}
+    .rh-date{background:var(--orange)}
+    .rh-br{bottom:-11px;right:-11px;cursor:se-resize}
+    .rh-bl{bottom:-11px;left:-11px;cursor:sw-resize}
+    .rh-tr{top:-11px;right:-11px;cursor:ne-resize}
+    .rh-tl{top:-11px;left:-11px;cursor:nw-resize}
+    /* Delete badge — top-left, hidden unless selected */
+    .del-badge{
+      position:absolute;top:-12px;left:-12px;
+      width:24px;height:24px;background:var(--danger);color:white;
+      border-radius:50%;border:2px solid white;
+      font-size:13px;font-weight:700;line-height:1;
+      display:none;align-items:center;justify-content:center;
+      cursor:pointer;z-index:21;
+      box-shadow:0 2px 6px rgba(0,0,0,0.25);touch-action:none;
+    }
+    /* Status */
+    #status-bar{border-radius:10px;padding:11px 14px;font-size:14px;font-weight:500;
+      margin-bottom:12px;display:none;align-items:center;gap:8px}
+    #status-bar.error{background:#fef2f2;color:var(--danger);display:flex}
+    #status-bar.info{background:var(--purple-light);color:var(--purple);display:flex}
+    /* Sticky save bar */
+    #bottom-bar{position:fixed;bottom:0;left:0;right:0;background:white;padding:12px 14px;
+      box-shadow:0 -2px 16px rgba(0,0,0,0.10);z-index:90;display:none}
+    #bottom-bar.visible{display:block}
+    /* Extra space so PDF bottom clears the save bar */
+    #screen-place{padding-bottom:80px}
+    /* Done */
+    #done-screen{text-align:center;padding:32px 16px}
+    #done-screen .done-icon{font-size:72px;margin-bottom:20px}
+    #done-screen h2{font-size:24px;font-weight:800;margin-bottom:8px}
+    #done-screen p{color:var(--muted);margin-bottom:28px}
+    /* Install */
+    #install-banner{position:fixed;bottom:0;left:0;right:0;background:var(--purple);
+      color:white;padding:14px 16px;display:none;align-items:center;gap:12px;
+      z-index:200;box-shadow:0 -4px 20px rgba(0,0,0,.15)}
+    #install-banner.visible{display:flex}
+    .btn-install{background:white;color:var(--purple);font-size:13px;padding:9px 16px;
+      border-radius:8px;border:none;font-weight:700;cursor:pointer;flex-shrink:0}
+    .btn-dismiss{background:transparent;color:rgba(255,255,255,.7);font-size:20px;
+      padding:4px 8px;border:none;cursor:pointer;flex-shrink:0}
+    /* Loader */
+    #loader{position:fixed;inset:0;background:rgba(255,255,255,.85);display:none;
+      align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:300}
+    #loader.visible{display:flex}
+    .spinner{width:44px;height:44px;border:4px solid #ede9ff;border-top-color:var(--purple);
+      border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    #loader p{font-size:15px;color:var(--purple);font-weight:600}
+    .screen{display:none}
+    .screen.active{display:block}
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="logo">✍️</span>
+    <div><h1>PDF Signer</h1><div class="subtitle">Sign &amp; date your documents</div></div>
+  </header>
+  <div id="steps">
+    <div class="step-pill active" id="step-1"><div class="step-num">1</div>Upload</div>
+    <div class="step-pill" id="step-2"><div class="step-num">2</div>Sign</div>
+    <div class="step-pill" id="step-3"><div class="step-num">3</div>Place</div>
+    <div class="step-pill" id="step-4"><div class="step-num">4</div>Done</div>
+  </div>
+  <div style="padding:0 14px;margin-top:10px">
+    <div id="status-bar"><span id="status-text"></span></div>
+  </div>
+  <main>
+
+    <!-- SCREEN 1: Upload -->
+    <div class="screen active" id="screen-upload">
+      <div id="upload-zone" onclick="document.getElementById('pdf-input').click()">
+        <div class="upload-icon">📄</div>
+        <h2>Select your PDF</h2>
+        <p>Tap to browse files on your device</p>
+        <button class="btn btn-primary" style="max-width:200px">Browse Files</button>
+      </div>
+      <input type="file" id="pdf-input" accept="application/pdf" style="display:none"/>
+    </div>
+
+    <!-- SCREEN 2: Draw signature -->
+    <div class="screen" id="screen-sign">
+      <div class="file-chip">
+        <span class="file-icon">📄</span>
+        <div>
+          <div class="file-name" id="file-name-display"></div>
+          <div class="file-meta" id="file-meta-display"></div>
+        </div>
+        <button class="btn btn-secondary change-btn" onclick="reset()">Change</button>
+      </div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:11px;font-weight:500">Draw your signature with your finger:</p>
+        <div id="sig-pad-wrap">
+          <canvas id="sig-canvas"></canvas>
+          <div id="sig-hint">✍️ Sign here</div>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:7px 0 14px">Use your finger or stylus</p>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="clearSig()">Clear</button>
+          <button class="btn btn-primary" onclick="useSig()">Use Signature →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCREEN 3: Place annotations -->
+    <div class="screen" id="screen-place">
+      <div class="file-chip">
+        <span class="file-icon">📄</span>
+        <div>
+          <div class="file-name" id="file-name-display2"></div>
+          <div class="file-meta" id="file-meta-display2"></div>
+        </div>
+        <button class="btn btn-secondary change-btn" onclick="reset()">Change</button>
+      </div>
+      <div id="tool-bar">
+        <div class="tool-btn active" id="tbtn-sig" onclick="setTool('sig')">✍️ Signature</div>
+        <div class="tool-btn" id="tbtn-date" onclick="setTool('date')">📅 Date</div>
+        <div class="tool-btn" id="tbtn-select" onclick="setTool('select')">☝️ Select</div>
+      </div>
+      <div id="date-bar">
+        <label>Date:</label>
+        <input type="text" id="date-input" placeholder="e.g. 15 June 2026"/>
+      </div>
+      <div id="hint-bar" class="hint-bar hint-purple">👆 Tap the document to place your signature</div>
+      <div id="page-nav">
+        <button class="btn btn-secondary" onclick="changePage(-1)">‹ Prev</button>
+        <span id="page-indicator">Page 1 / 1</span>
+        <button class="btn btn-secondary" onclick="changePage(1)">Next ›</button>
+      </div>
+      <div class="card" style="padding:6px;overflow:visible">
+        <div id="pdf-viewport">
+          <canvas id="pdf-canvas"></canvas>
+          <!-- annotation overlays injected here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- SCREEN 4: Done -->
+    <div class="screen" id="screen-done">
+      <div class="card">
+        <div id="done-screen">
+          <div class="done-icon">🎉</div>
+          <h2>Document Signed!</h2>
+          <p>Your signed PDF has been saved to your Downloads folder.</p>
+          <button class="btn btn-primary" style="max-width:260px;margin:0 auto" onclick="reset()">Sign Another PDF</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="bottom-bar">
+  <button class="btn btn-primary" onclick="applyAndDownload()">⬇ Save Signed PDF</button>
+</div>
+<div id="install-banner">
+  <div><div style="font-size:14px;font-weight:600">Install PDF Signer</div><div style="font-size:11px;opacity:.8">Add to home screen</div></div>
+  <button class="btn-install" onclick="installApp()">Install</button>
+  <button class="btn-dismiss" onclick="dismissInstall()">✕</button>
+</div>
+<div id="loader"><div class="spinner"></div><p id="loader-text">Processing…</p></div>
+
+<script>
+// ── Service Worker ──────────────────────────────────────────────────────────
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let pdfBytes=null, pdfJsDoc=null, totalPages=1, currentPage=1;
+let sigDataUrl=null, pdfFileName='';
+let canvasW=0, canvasH=0;
+let currentTool='sig';
+let selectedId=null;
+let deferredInstall=null;
+const pageAnnotations={};
+let annIdCounter=0;
+
+function getPageAnns(pg){ if(!pageAnnotations[pg]) pageAnnotations[pg]=[]; return pageAnnotations[pg]; }
+function hasAnyAnnotation(){ return Object.values(pageAnnotations).some(a=>a.length>0); }
+function findAnn(id){ for(const pg of Object.values(pageAnnotations)) for(const a of pg) if(a.id===id) return a; return null; }
+
+// ── PWA install ──────────────────────────────────────────────────────────────
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); deferredInstall=e;
+  if(!localStorage.getItem('installDismissed')) document.getElementById('install-banner').classList.add('visible');
+});
+function installApp(){ if(!deferredInstall)return; deferredInstall.prompt(); deferredInstall.userChoice.then(()=>{ deferredInstall=null; document.getElementById('install-banner').classList.remove('visible'); }); }
+function dismissInstall(){ localStorage.setItem('installDismissed','1'); document.getElementById('install-banner').classList.remove('visible'); }
+
+// ── Steps ────────────────────────────────────────────────────────────────────
+const SCREENS=['upload','sign','place','done'];
+function goToStep(name){
+  SCREENS.forEach((s,i)=>{
+    document.getElementById('screen-'+s).classList.toggle('active',s===name);
+    const pill=document.getElementById('step-'+(i+1));
+    pill.classList.remove('active','done');
+    const ci=SCREENS.indexOf(name);
+    if(i===ci) pill.classList.add('active'); else if(i<ci) pill.classList.add('done');
+  });
+  clearStatus();
+  document.getElementById('bottom-bar').classList.toggle('visible',name==='place');
+}
+
+// ── Status / Loader ──────────────────────────────────────────────────────────
+function showStatus(type,msg){ const b=document.getElementById('status-bar'); b.className=type; document.getElementById('status-text').textContent=msg; b.style.display='flex'; }
+function clearStatus(){ document.getElementById('status-bar').style.display='none'; }
+function showLoader(msg='Processing…'){ document.getElementById('loader-text').textContent=msg; document.getElementById('loader').classList.add('visible'); }
+function hideLoader(){ document.getElementById('loader').classList.remove('visible'); }
+
+// ── File upload ──────────────────────────────────────────────────────────────
+document.getElementById('pdf-input').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  if(!file.name.toLowerCase().endsWith('.pdf')){ showStatus('error','Please select a PDF file.'); return; }
+  showLoader('Loading PDF…');
+  try{
+    // Use FileReader for maximum Android compatibility
+    pdfBytes = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(new Uint8Array(e.target.result));
+      reader.onerror = () => reject(new Error('FileReader failed'));
+      reader.readAsArrayBuffer(file);
+    });
+    pdfFileName=file.name;
+    pdfJsDoc=await pdfjsLib.getDocument({data:pdfBytes}).promise;
+    totalPages=pdfJsDoc.numPages; currentPage=1;
+    const meta=totalPages+' page'+(totalPages>1?'s':'')+' · '+(file.size/1024).toFixed(0)+' KB';
+    document.getElementById('file-name-display').textContent=pdfFileName;
+    document.getElementById('file-meta-display').textContent=meta;
+    document.getElementById('file-name-display2').textContent=pdfFileName;
+    document.getElementById('file-meta-display2').textContent=meta;
+    initSigCanvas();
+    goToStep('sign');
+  }catch(err){ showStatus('error','Could not load PDF.'); console.error(err); }
+  hideLoader();
+});
+
+// ── Signature pad ────────────────────────────────────────────────────────────
+let sigCtx, sigDrawing=false, sigLX=0, sigLY=0;
+function initSigCanvas(){
+  const canvas=document.getElementById('sig-canvas');
+  const wrap=document.getElementById('sig-pad-wrap');
+  const dpr=window.devicePixelRatio||1;
+  const w=wrap.clientWidth||window.innerWidth-56;
+  canvas.width=w*dpr; canvas.height=150*dpr;
+  canvas.style.width=w+'px'; canvas.style.height='150px';
+  sigCtx=canvas.getContext('2d');
+  sigCtx.scale(dpr,dpr);
+  sigCtx.lineCap='round'; sigCtx.lineJoin='round'; sigCtx.strokeStyle='#1a1a2e'; sigCtx.lineWidth=2.5;
+  const getXY=e=>{const r=canvas.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return[s.clientX-r.left,s.clientY-r.top]};
+  const onStart=e=>{e.preventDefault();sigDrawing=true;document.getElementById('sig-hint').style.opacity='0';[sigLX,sigLY]=getXY(e)};
+  const onMove=e=>{e.preventDefault();if(!sigDrawing)return;const[x,y]=getXY(e);sigCtx.beginPath();sigCtx.moveTo(sigLX,sigLY);sigCtx.lineTo(x,y);sigCtx.stroke();[sigLX,sigLY]=[x,y]};
+  const onEnd=e=>{e.preventDefault();sigDrawing=false};
+  canvas.addEventListener('mousedown',onStart); canvas.addEventListener('mousemove',onMove);
+  canvas.addEventListener('mouseup',onEnd); canvas.addEventListener('mouseleave',onEnd);
+  canvas.addEventListener('touchstart',onStart,{passive:false});
+  canvas.addEventListener('touchmove',onMove,{passive:false});
+  canvas.addEventListener('touchend',onEnd,{passive:false});
+}
+function clearSig(){ sigCtx.clearRect(0,0,document.getElementById('sig-canvas').width,document.getElementById('sig-canvas').height); document.getElementById('sig-hint').style.opacity='1'; }
+function sigIsEmpty(){ const d=sigCtx.getImageData(0,0,document.getElementById('sig-canvas').width,document.getElementById('sig-canvas').height).data; for(let i=3;i<d.length;i+=4) if(d[i]>0) return false; return true; }
+function useSig(){
+  if(sigIsEmpty()){showStatus('error','Please draw your signature first.');return}
+  sigDataUrl=document.getElementById('sig-canvas').toDataURL('image/png');
+  const today=new Date();
+  document.getElementById('date-input').value=today.getDate()+' '+today.toLocaleString('default',{month:'long'})+' '+today.getFullYear();
+  goToStep('place'); setTool('sig'); renderPage(currentPage);
+}
+
+// ── Tool selector ────────────────────────────────────────────────────────────
+function setTool(t){
+  currentTool=t;
+  ['sig','date','select'].forEach(id=>{
+    const el=document.getElementById('tbtn-'+id);
+    el.classList.remove('active','active-orange');
+    if(id===t) el.classList.add(id==='date'?'active-orange':'active');
+  });
+  document.getElementById('date-bar').classList.toggle('visible',t==='date');
+  const hint=document.getElementById('hint-bar');
+  if(t==='sig'){ hint.className='hint-bar hint-purple'; hint.textContent='✍️ Tap document to place signature'; }
+  else if(t==='date'){ hint.className='hint-bar hint-orange'; hint.textContent='📅 Tap document to place date'; }
+  else { hint.className='hint-bar hint-green'; hint.textContent='☝️ Tap an item to select it — then drag, resize corners, or tap ✕ to delete'; }
+  deselectAll();
+}
+
+// ── PDF rendering ────────────────────────────────────────────────────────────
+async function renderPage(num){
+  if(!pdfJsDoc) return;
+  showLoader('Loading page…');
+  const page=await pdfJsDoc.getPage(num);
+  const vp=document.getElementById('pdf-viewport');
+  const maxW=vp.clientWidth||window.innerWidth-44;
+  const baseVP=page.getViewport({scale:1});
+  const scale=maxW/baseVP.width;
+  const scaled=page.getViewport({scale});
+  canvasW=scaled.width; canvasH=scaled.height;
+  const canvas=document.getElementById('pdf-canvas');
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=scaled.width*dpr; canvas.height=scaled.height*dpr;
+  canvas.style.width=scaled.width+'px'; canvas.style.height=scaled.height+'px';
+  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  await page.render({canvasContext:ctx,viewport:scaled}).promise;
+  currentPage=num;
+  document.getElementById('page-indicator').textContent=`Page ${num} / ${totalPages}`;
+  document.getElementById('page-nav').style.display=totalPages>1?'flex':'none';
+  // Remove old overlays and recreate for this page
+  document.querySelectorAll('.ann-overlay').forEach(el=>el.remove());
+  selectedId=null;
+  getPageAnns(num).forEach(ann=>createOverlayEl(ann));
+  hideLoader();
+}
+function changePage(d){ const n=currentPage+d; if(n<1||n>totalPages)return; renderPage(n); }
+
+// ── Create annotation ────────────────────────────────────────────────────────
+function addAnnotation(type,cx,cy){
+  const id='ann-'+(++annIdCounter);
+  let w,h,data;
+  if(type==='sig'){ w=canvasW*0.30; h=w*0.40; data=sigDataUrl; }
+  else { const txt=document.getElementById('date-input').value||'Date'; w=canvasW*0.36; h=30; data=txt; }
+  const x=Math.max(0,Math.min(cx-w/2,canvasW-w));
+  const y=Math.max(0,Math.min(cy-h/2,canvasH-h));
+  const ann={id,type,x,y,w,h,data,pageNum:currentPage};
+  getPageAnns(currentPage).push(ann);
+  createOverlayEl(ann);
+  selectAnn(id);
+}
+
+// ── Build overlay DOM ────────────────────────────────────────────────────────
+function createOverlayEl(ann){
+  const el=document.createElement('div');
+  el.className='ann-overlay';
+  el.id=ann.id;
+  applyOverlayGeometry(el,ann);
+
+  if(ann.type==='sig'){
+    const img=document.createElement('img');
+    img.src=ann.data; img.alt='signature';
+    el.appendChild(img);
+    addCornerHandles(el,'rh-sig');
+  } else {
+    const span=document.createElement('div');
+    span.className='ann-date-text';
+    span.textContent=ann.data;
+    span.style.fontSize=Math.max(10,ann.h*0.55)+'px';
+    el.appendChild(span);
+    addCornerHandles(el,'rh-date');
+  }
+  addDeleteBadge(el,ann);
+  document.getElementById('pdf-viewport').appendChild(el);
+  attachInteraction(el,ann);
+}
+
+function applyOverlayGeometry(el,ann){
+  el.style.left=ann.x+'px'; el.style.top=ann.y+'px';
+  el.style.width=ann.w+'px'; el.style.height=ann.h+'px';
+}
+
+function addCornerHandles(el,cls){
+  ['tl','tr','bl','br'].forEach(pos=>{
+    const h=document.createElement('div');
+    h.className=`rh ${cls} rh-${pos}`; h.dataset.pos=pos;
+    el.appendChild(h);
+  });
+}
+
+function addDeleteBadge(el,ann){
+  const b=document.createElement('div');
+  b.className='del-badge'; b.textContent='✕';
+  // stop propagation so the tap doesn't also trigger overlay interaction
+  b.addEventListener('pointerdown',e=>e.stopPropagation());
+  b.addEventListener('click',e=>{ e.stopPropagation(); deleteAnnotation(ann.id); });
+  b.addEventListener('touchend',e=>{ e.stopPropagation(); e.preventDefault(); deleteAnnotation(ann.id); },{passive:false});
+  el.appendChild(b);
+}
+
+// ── Selection ────────────────────────────────────────────────────────────────
+function selectAnn(id){
+  // deselect previous without resetting selectedId yet
+  document.querySelectorAll('.ann-overlay.sel-sig,.ann-overlay.sel-date').forEach(el=>{
+    el.classList.remove('sel-sig','sel-date');
+    el.querySelectorAll('.rh,.del-badge').forEach(h=>h.style.display='none');
+  });
+  selectedId=id;
+  const el=document.getElementById(id);
+  if(!el) return;
+  const ann=findAnn(id);
+  const selCls=ann&&ann.type==='date'?'sel-date':'sel-sig';
+  const rhCls=ann&&ann.type==='date'?'rh-date':'rh-sig';
+  el.classList.add(selCls);
+  el.querySelectorAll('.rh').forEach(h=>h.style.display='block');
+  const badge=el.querySelector('.del-badge');
+  if(badge) badge.style.display='flex';
+}
+
+function deselectAll(){
+  document.querySelectorAll('.ann-overlay.sel-sig,.ann-overlay.sel-date').forEach(el=>{
+    el.classList.remove('sel-sig','sel-date');
+    el.querySelectorAll('.rh,.del-badge').forEach(h=>h.style.display='none');
+  });
+  selectedId=null;
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+function deleteAnnotation(id){
+  document.getElementById(id)?.remove();
+  for(const pg of Object.keys(pageAnnotations)){
+    const arr=pageAnnotations[pg];
+    const idx=arr.findIndex(a=>a.id===id);
+    if(idx!==-1){ arr.splice(idx,1); break; }
+  }
+  if(selectedId===id) selectedId=null;
+}
+
+// ── Interaction: tap-to-select, drag-to-move, corner-resize ──────────────────
+function attachInteraction(el,ann){
+  // We track pointer state with a single "gesture" object.
+  // This avoids the bug where touchend fires on the OVERLAY after a resize
+  // and then propagates up to the viewport, creating a spurious "tap".
+  const g={ active:false, mode:null, resizePos:'',
+    startCX:0, startCY:0, startX:0, startY:0, startW:0, startH:0,
+    movedEnough:false };
+  const MIN_W=40, MIN_H=16, MOVE_THRESHOLD=4;
+
+  function gestureStart(cx,cy,target){
+    g.active=true; g.movedEnough=false;
+    g.startCX=cx; g.startCY=cy;
+    g.startX=ann.x; g.startY=ann.y; g.startW=ann.w; g.startH=ann.h;
+    if(target.classList.contains('rh')){
+      g.mode='resize'; g.resizePos=target.dataset.pos;
+    } else if(!target.classList.contains('del-badge')){
+      g.mode='drag';
+    } else {
+      g.mode=null; g.active=false; // delete badge — let its own handler fire
+    }
+    // Select immediately on any touch/click
+    if(g.active) selectAnn(ann.id);
+    el.style.opacity='.85';
+  }
+
+  function gestureMove(cx,cy){
+    if(!g.active||!g.mode) return;
+    const dx=cx-g.startCX, dy=cy-g.startCY;
+    if(!g.movedEnough && Math.hypot(dx,dy)>MOVE_THRESHOLD) g.movedEnough=true;
+    if(!g.movedEnough) return;
+
+    if(g.mode==='drag'){
+      ann.x=Math.max(0,Math.min(g.startX+dx,canvasW-ann.w));
+      ann.y=Math.max(0,Math.min(g.startY+dy,canvasH-ann.h));
+      el.style.left=ann.x+'px'; el.style.top=ann.y+'px';
+    } else {
+      // resize — maintain aspect ratio for signatures, free for dates
+      const aspect=g.startH/g.startW;
+      let nw=g.startW, nh=g.startH, nx=g.startX, ny=g.startY;
+      const rp=g.resizePos;
+      if(rp==='br'||rp==='tr'){ nw=Math.max(MIN_W,g.startW+dx); }
+      else { nw=Math.max(MIN_W,g.startW-dx); nx=g.startX+g.startW-nw; }
+      if(ann.type==='sig'){ nh=nw*aspect; }
+      else {
+        if(rp==='br'||rp==='bl'){ nh=Math.max(MIN_H,g.startH+dy); }
+        else { nh=Math.max(MIN_H,g.startH-dy); ny=g.startY+g.startH-nh; }
+      }
+      if(rp==='tr'||rp==='tl'){ ny=g.startY+g.startH-nh; }
+      nx=Math.max(0,nx); ny=Math.max(0,ny);
+      nw=Math.min(nw,canvasW-nx); nh=Math.min(nh,canvasH-ny);
+      ann.x=nx; ann.y=ny; ann.w=nw; ann.h=nh;
+      el.style.left=nx+'px'; el.style.top=ny+'px';
+      el.style.width=nw+'px'; el.style.height=nh+'px';
+      if(ann.type==='date'){
+        const span=el.querySelector('.ann-date-text');
+        if(span) span.style.fontSize=Math.max(10,nh*0.55)+'px';
+      }
+    }
+  }
+
+  function gestureEnd(){
+    g.active=false; g.mode=null; g.movedEnough=false;
+    el.style.opacity='1';
+  }
+
+  // Mouse
+  el.addEventListener('mousedown',e=>{
+    e.stopPropagation(); e.preventDefault();
+    gestureStart(e.clientX,e.clientY,e.target);
+  });
+  document.addEventListener('mousemove',e=>{ if(g.active) gestureMove(e.clientX,e.clientY); });
+  document.addEventListener('mouseup',e=>{ if(g.active){ gestureEnd(); }});
+
+  // Touch — key fix: use pointerId locking so viewport never sees these events
+  el.addEventListener('touchstart',e=>{
+    e.stopPropagation(); e.preventDefault();
+    if(e.touches.length!==1) return;
+    const t=e.touches[0];
+    gestureStart(t.clientX,t.clientY,e.target);
+  },{passive:false});
+  el.addEventListener('touchmove',e=>{
+    e.stopPropagation(); e.preventDefault();
+    if(!g.active||e.touches.length!==1) return;
+    gestureMove(e.touches[0].clientX,e.touches[0].clientY);
+  },{passive:false});
+  el.addEventListener('touchend',e=>{
+    // CRITICAL: stopPropagation prevents the viewport's touchend from also firing
+    // which was causing duplicate annotation creation on resize
+    e.stopPropagation(); e.preventDefault();
+    gestureEnd();
+  },{passive:false});
+}
+
+// ── Viewport tap to place new annotation ─────────────────────────────────────
+// We listen on the canvas only (not the whole viewport) to avoid catching
+// events that bubbled up from overlays even after stopPropagation.
+// (stopPropagation works for touch; click bubbles differently — we check target)
+{
+  const canvas=document.getElementById('pdf-canvas');
+
+  let tSX=0,tSY=0,tT=0;
+  canvas.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1) return;
+    const r=canvas.getBoundingClientRect();
+    tSX=e.touches[0].clientX-r.left; tSY=e.touches[0].clientY-r.top; tT=Date.now();
+  },{passive:true});
+  canvas.addEventListener('touchend',e=>{
+    if(e.changedTouches.length!==1) return;
+    const r=canvas.getBoundingClientRect();
+    const ex=e.changedTouches[0].clientX-r.left, ey=e.changedTouches[0].clientY-r.top;
+    if(Math.hypot(ex-tSX,ey-tSY)<10 && Date.now()-tT<400) handleCanvasTap(tSX,tSY);
+  },{passive:true});
+  canvas.addEventListener('click',e=>{
+    const r=canvas.getBoundingClientRect();
+    handleCanvasTap(e.clientX-r.left,e.clientY-r.top);
+  });
+}
+function handleCanvasTap(cx,cy){
+  // If something is selected, first tap always deselects — never places
+  if(selectedId){ deselectAll(); return; }
+  if(currentTool==='sig') addAnnotation('sig',cx,cy);
+  else if(currentTool==='date') addAnnotation('date',cx,cy);
+  else deselectAll();
+}
+
+// ── Apply & download ──────────────────────────────────────────────────────────
+async function applyAndDownload(){
+  if(!hasAnyAnnotation()){ showStatus('error','Please place at least one signature or date first.'); return; }
+  showLoader('Building PDF…');
+  try{
+    const {PDFDocument,rgb}=PDFLib;
+    const doc=await PDFDocument.load(pdfBytes, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    }).catch(async ()=>{
+      // Second attempt: try loading from a fresh copy of the bytes
+      return await PDFDocument.load(new Uint8Array(pdfBytes), {
+        ignoreEncryption: true,
+        updateMetadata: false,
+      });
+    });
+    const pdfPages=doc.getPages();
+    const vpMaxW=document.getElementById('pdf-viewport').clientWidth||window.innerWidth-44;
+
+    for(let pg=1;pg<=totalPages;pg++){
+      const anns=pageAnnotations[pg]; if(!anns||!anns.length) continue;
+      const pdfPage=pdfPages[pg-1];
+      const {width:pdfW,height:pdfH}=pdfPage.getSize();
+      const pjsPage=await pdfJsDoc.getPage(pg);
+      const baseVP=pjsPage.getViewport({scale:1});
+      const pgScale=vpMaxW/baseVP.width;
+      const pgScaled=pjsPage.getViewport({scale:pgScale});
+      const pgDispW=pgScaled.width, pgDispH=pgScaled.height;
+      const scaleX=pdfW/pgDispW, scaleY=pdfH/pgDispH;
+
+      for(const ann of anns){
+        const pdfX=ann.x*scaleX;
+        const pdfY=pdfH-(ann.y*scaleY)-(ann.h*scaleY);
+        const pdfW2=ann.w*scaleX, pdfH2=ann.h*scaleY;
+        if(ann.type==='sig'){
+          // Decode base64 data URL directly — avoids fetch() issues on Android
+          const b64=ann.data.split(',')[1];
+          const binStr=atob(b64);
+          const imgArr=new Uint8Array(binStr.length);
+          for(let i=0;i<binStr.length;i++) imgArr[i]=binStr.charCodeAt(i);
+          const pngImg=await doc.embedPng(imgArr);
+          pdfPage.drawImage(pngImg,{x:Math.max(0,pdfX),y:Math.max(0,pdfY),width:pdfW2,height:pdfH2});
+        } else {
+          const fontSize=Math.max(8,pdfH2*0.6);
+          pdfPage.drawText(ann.data,{
+            x:Math.max(0,pdfX)+2,
+            y:Math.max(0,pdfY)+pdfH2/2-fontSize/3,
+            size:fontSize, color:rgb(0.1,0.1,0.1),
+          });
+        }
+      }
+    }
+    const signed=await doc.save();
+    const blob=new Blob([signed],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=pdfFileName.replace(/\.pdf$/i,'')+'_signed.pdf';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    goToStep('done');
+  }catch(err){ console.error(err); showStatus('error','Could not save: '+err.message); }
+  hideLoader();
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+function reset(){
+  pdfBytes=null; pdfJsDoc=null; sigDataUrl=null; pdfFileName='';
+  currentPage=1; totalPages=1; selectedId=null; annIdCounter=0;
+  Object.keys(pageAnnotations).forEach(k=>delete pageAnnotations[k]);
+  document.querySelectorAll('.ann-overlay').forEach(el=>el.remove());
+  document.getElementById('pdf-input').value='';
+  goToStep('upload');
+}
+</script>
+</body>
+</html>
