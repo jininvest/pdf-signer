@@ -342,6 +342,7 @@ document.getElementById('pdf-input').addEventListener('change', async e=>{
   if(!file.name.toLowerCase().endsWith('.pdf')){ showStatus('error','Please select a PDF file.'); return; }
   showLoader('Loading PDF…');
   try{
+<<<<<<< HEAD
     // Use FileReader for maximum Android compatibility
     pdfBytes = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -349,6 +350,9 @@ document.getElementById('pdf-input').addEventListener('change', async e=>{
       reader.onerror = () => reject(new Error('FileReader failed'));
       reader.readAsArrayBuffer(file);
     });
+=======
+    pdfBytes=new Uint8Array(await file.arrayBuffer());
+>>>>>>> 8a38b5ace764da4cfc7de0edef7a8e788857d6e3
     pdfFileName=file.name;
     pdfJsDoc=await pdfjsLib.getDocument({data:pdfBytes}).promise;
     totalPages=pdfJsDoc.numPages; currentPage=1;
@@ -671,6 +675,7 @@ async function applyAndDownload(){
   showLoader('Building PDF…');
   try{
     const {PDFDocument,rgb}=PDFLib;
+<<<<<<< HEAD
     const doc=await PDFDocument.load(pdfBytes, {
       ignoreEncryption: true,
       updateMetadata: false,
@@ -681,6 +686,9 @@ async function applyAndDownload(){
         updateMetadata: false,
       });
     });
+=======
+    const doc=await PDFDocument.load(pdfBytes);
+>>>>>>> 8a38b5ace764da4cfc7de0edef7a8e788857d6e3
     const pdfPages=doc.getPages();
     const vpMaxW=document.getElementById('pdf-viewport').clientWidth||window.innerWidth-44;
 
@@ -700,12 +708,17 @@ async function applyAndDownload(){
         const pdfY=pdfH-(ann.y*scaleY)-(ann.h*scaleY);
         const pdfW2=ann.w*scaleX, pdfH2=ann.h*scaleY;
         if(ann.type==='sig'){
+<<<<<<< HEAD
           // Decode base64 data URL directly — avoids fetch() issues on Android
           const b64=ann.data.split(',')[1];
           const binStr=atob(b64);
           const imgArr=new Uint8Array(binStr.length);
           for(let i=0;i<binStr.length;i++) imgArr[i]=binStr.charCodeAt(i);
           const pngImg=await doc.embedPng(imgArr);
+=======
+          const imgBuf=await(await fetch(ann.data)).arrayBuffer();
+          const pngImg=await doc.embedPng(imgBuf);
+>>>>>>> 8a38b5ace764da4cfc7de0edef7a8e788857d6e3
           pdfPage.drawImage(pngImg,{x:Math.max(0,pdfX),y:Math.max(0,pdfY),width:pdfW2,height:pdfH2});
         } else {
           const fontSize=Math.max(8,pdfH2*0.6);
