@@ -708,7 +708,14 @@ async function applyAndDownload(){
           const imgArr=new Uint8Array(binStr.length);
           for(let i=0;i<binStr.length;i++) imgArr[i]=binStr.charCodeAt(i);
           const pngImg=await doc.embedPng(imgArr);
-          pdfPage.drawImage(pngImg,{x:Math.max(0,pdfX),y:Math.max(0,pdfY),width:pdfW2,height:pdfH2});
+          // Use the overlay's screen aspect ratio to drive PDF dimensions,
+          // but scale purely from the width using scaleX so X and Y stay uniform.
+          // Using scaleY for height causes squeezing when PDF pts/px ratio differs.
+          const screenAspect = ann.h / ann.w;   // h:w ratio as drawn on screen
+          const finalW = pdfW2;                  // width in PDF points (from scaleX)
+          const finalH = finalW * screenAspect;  // preserve exact screen aspect ratio
+          const finalY = pdfH - (ann.y * scaleY) - finalH;
+          pdfPage.drawImage(pngImg,{x:Math.max(0,pdfX),y:Math.max(0,finalY),width:finalW,height:finalH});
         } else {
           const fontSize=Math.max(8,pdfH2*0.6);
           pdfPage.drawText(ann.data,{
