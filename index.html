@@ -295,10 +295,11 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── State ────────────────────────────────────────────────────────────────────
-let pdfBytes=null, pdfJsDoc=null, totalPages=1, currentPage=1;
+let pdfBytes=null, pdfRawBuf=null, pdfJsDoc=null, totalPages=1, currentPage=1;
 let sigDataUrl=null, pdfFileName='';
 let canvasW=0, canvasH=0;
 let currentTool='sig';
+let lastSelectTime=0; // suppress canvas tap immediately after selecting
 let selectedId=null;
 let deferredInstall=null;
 const pageAnnotations={};
@@ -343,14 +344,16 @@ document.getElementById('pdf-input').addEventListener('change', async e=>{
   showLoader('Loading PDF…');
   try{
     // Use FileReader for maximum Android compatibility
-    pdfBytes = await new Promise((resolve, reject) => {
+    const rawBuf = await new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = e => resolve(new Uint8Array(e.target.result));
+      reader.onload = e => resolve(e.target.result);  // keep as ArrayBuffer
       reader.onerror = () => reject(new Error('FileReader failed'));
       reader.readAsArrayBuffer(file);
     });
+    pdfBytes = new Uint8Array(rawBuf);   // for pdf.js preview
+    pdfRawBuf = rawBuf;                  // for pdf-lib save (needs fresh copy each time)
     pdfFileName=file.name;
-    pdfJsDoc=await pdfjsLib.getDocument({data:pdfBytes}).promise;
+    pdfJsDoc=await pdfjsLib.getDocument({data:new Uint8Array(rawBuf)}).promise;
     totalPages=pdfJsDoc.numPages; currentPage=1;
     const meta=totalPages+' page'+(totalPages>1?'s':'')+' · '+(file.size/1024).toFixed(0)+' KB';
     document.getElementById('file-name-display').textContent=pdfFileName;
@@ -503,6 +506,7 @@ function addDeleteBadge(el,ann){
 
 // ── Selection ────────────────────────────────────────────────────────────────
 function selectAnn(id){
+  lastSelectTime=Date.now(); // suppress canvas tap ghost-click
   // deselect previous without resetting selectedId yet
   document.querySelectorAll('.ann-overlay.sel-sig,.ann-overlay.sel-date').forEach(el=>{
     el.classList.remove('sel-sig','sel-date');
@@ -658,7 +662,9 @@ function attachInteraction(el,ann){
   });
 }
 function handleCanvasTap(cx,cy){
-  // If something is selected, first tap always deselects — never places
+  // Ignore ghost click fired by Android touch synthesiser right after selecting an overlay
+  if(Date.now()-lastSelectTime < 350) return;
+  // If something is selected, first tap deselects only — never places
   if(selectedId){ deselectAll(); return; }
   if(currentTool==='sig') addAnnotation('sig',cx,cy);
   else if(currentTool==='date') addAnnotation('date',cx,cy);
@@ -671,15 +677,11 @@ async function applyAndDownload(){
   showLoader('Building PDF…');
   try{
     const {PDFDocument,rgb}=PDFLib;
-    const doc=await PDFDocument.load(pdfBytes, {
+    // Always pass a fresh Uint8Array copy — avoids "detached ArrayBuffer" on Android
+    const freshBytes = new Uint8Array(pdfRawBuf.slice(0));
+    const doc = await PDFDocument.load(freshBytes, {
       ignoreEncryption: true,
       updateMetadata: false,
-    }).catch(async ()=>{
-      // Second attempt: try loading from a fresh copy of the bytes
-      return await PDFDocument.load(new Uint8Array(pdfBytes), {
-        ignoreEncryption: true,
-        updateMetadata: false,
-      });
     });
     const pdfPages=doc.getPages();
     const vpMaxW=document.getElementById('pdf-viewport').clientWidth||window.innerWidth-44;
@@ -731,7 +733,7 @@ async function applyAndDownload(){
 
 // ── Reset ─────────────────────────────────────────────────────────────────────
 function reset(){
-  pdfBytes=null; pdfJsDoc=null; sigDataUrl=null; pdfFileName='';
+  pdfBytes=null; pdfRawBuf=null; pdfJsDoc=null; sigDataUrl=null; pdfFileName='';
   currentPage=1; totalPages=1; selectedId=null; annIdCounter=0;
   Object.keys(pageAnnotations).forEach(k=>delete pageAnnotations[k]);
   document.querySelectorAll('.ann-overlay').forEach(el=>el.remove());
